@@ -1,0 +1,167 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums for better type safety
+enum VideoStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum OutputStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  RETRYING
+}
+
+enum JobType {
+  HLS_TRANSCODE
+  THUMBNAIL_GENERATE
+  // Future job types can be added here
+}
+
+// Main video entity
+model Video {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title            String      @db.VarChar(255)
+  originalFilename String      @map("original_filename") @db.VarChar(255)
+  fileExtension    String      @map("file_extension") @db.VarChar(10)
+  fileSize         BigInt      @map("file_size") // in bytes
+  mimeType         String      @map("mime_type") @db.VarChar(100)
+  status           VideoStatus @default(PENDING)
+  uploadPath       String      @map("upload_path") @db.Text
+  durationSeconds  Int?        @map("duration_seconds") // populated after processing
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  processedAt DateTime? @map("processed_at") @db.Timestamptz
+
+  // Search and filtering
+  tags        String[] @default([])
+  description String?  @db.Text
+
+  // Relations
+  outputs         VideoOutput[]
+  transcodingJobs TranscodingJob[]
+
+  // Indexes
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([tags], type: Gin)
+  @@map("videos")
+}
+
+// HLS output files for different resolutions
+model VideoOutput {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  videoId    String @map("video_id") @db.Uuid
+  resolution String @db.VarChar(10) // '480p', '720p', '1080p'
+  width      Int
+  height     Int
+  bitrate    Int // in kbps
+
+  // HLS file paths
+  playlistPath     String @map("playlist_path") @db.Text
+  segmentDirectory String @map("segment_directory") @db.Text
+
+  // Output metadata
+  fileSize        BigInt? @map("file_size") // total size of segments + playlist
+  segmentCount    Int?    @map("segment_count")
+  segmentDuration Float   @default(10.0) @map("segment_duration") // seconds
+
+  // Processing info
+  status      OutputStatus @default(PENDING)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  completedAt DateTime?    @map("completed_at") @db.Timestamptz
+
+  // Relations
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  // Constraints and indexes
+  @@unique([videoId, resolution])
+  @@index([videoId])
+  @@index([status])
+  @@index([resolution])
+  @@map("video_outputs")
+}
+
+// Background job tracking
+model TranscodingJob {
+  id      String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  videoId String  @map("video_id") @db.Uuid
+  jobType JobType @default(HLS_TRANSCODE) @map("job_type")
+
+  // Job status and progress
+  status             JobStatus @default(QUEUED)
+  progressPercentage Int       @default(0) @map("progress_percentage")
+
+  // Retry logic
+  attemptCount Int @default(0) @map("attempt_count")
+  maxAttempts  Int @default(3) @map("max_attempts")
+
+  // Job data and results (stored as JSON)
+  jobData      Json?   @map("job_data") @db.JsonB
+  resultData   Json?   @map("result_data") @db.JsonB
+  errorMessage String? @map("error_message") @db.Text
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  startedAt   DateTime? @map("started_at") @db.Timestamptz
+  completedAt DateTime? @map("completed_at") @db.Timestamptz
+  nextRetryAt DateTime? @map("next_retry_at") @db.Timestamptz
+
+  // Processing details
+  workerId                 String? @map("worker_id") @db.VarChar(100)
+  estimatedDurationSeconds Int?    @map("estimated_duration_seconds")
+
+  // Relations
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  // Indexes
+  @@index([videoId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([nextRetryAt])
+  @@map("transcoding_jobs")
+}
+
+// System metrics for monitoring (optional)
+model SystemMetric {
+  id          String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  metricName  String  @map("metric_name") @db.VarChar(100)
+  metricValue Decimal @map("metric_value")
+  metricUnit  String? @map("metric_unit") @db.VarChar(20) // 'count', 'bytes', 'seconds', 'percentage'
+
+  // Context and metadata
+  context    Json?    @db.JsonB
+  recordedAt DateTime @default(now()) @map("recorded_at") @db.Timestamptz
+
+  // Indexes
+  @@index([metricName, recordedAt(sort: Desc)])
+  @@index([recordedAt(sort: Desc)])
+  @@map("system_metrics")
+}
