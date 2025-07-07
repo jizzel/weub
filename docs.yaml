@@ -1,0 +1,955 @@
+openapi: 3.0.3
+info:
+  title: Weub Video Streaming API
+  description: |
+    A minimal video-sharing application that allows users to upload, process, and stream videos.
+    
+    ## Features
+    - Upload videos in common formats (MP4, MOV, WEBM, AVI)
+    - Automatic HLS transcoding with adaptive bitrate streaming
+    - Search and filter videos by title, tags, and upload date
+    - Real-time processing status updates
+    - Browser-based video streaming with quality selection
+    
+    ## Processing Pipeline
+    1. **Upload**: Videos are uploaded and stored with UUID-based filenames
+    2. **Queue**: Background transcoding jobs are created and queued
+    3. **Process**: Videos are transcoded to HLS format with multiple resolutions
+    4. **Stream**: Ready videos can be streamed via HLS playlists
+    
+    ## Response Format
+    All API responses follow a consistent structure with `data`, `statusCode`, and `error` fields.
+  version: 1.0.0
+  contact:
+    name: Weub API Support
+    email: support@weub.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Development server
+  - url: https://api.weub.com/v1
+    description: Production server
+
+paths:
+  /videos/upload:
+    post:
+      summary: Upload a new video
+      description: Upload a video file for processing and transcoding into HLS format
+      operationId: uploadVideo
+      tags:
+        - Video Management
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - title
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Video file to upload (MP4, MOV, WEBM, AVI)
+                title:
+                  type: string
+                  maxLength: 255
+                  description: Video title
+                  example: "Beautiful Nature Scenery"
+                description:
+                  type: string
+                  description: Optional video description
+                  example: "Stunning landscapes from around the world"
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of tags for categorization
+                  example: ["nature", "landscape", "4k"]
+      responses:
+        '201':
+          description: Video uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: Invalid request or unsupported file format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidFormat:
+                  summary: Unsupported file format
+                  value:
+                    data: null
+                    statusCode: 400
+                    error:
+                      code: "INVALID_FILE_FORMAT"
+                      message: "Unsupported video format. Please upload MP4, MOV, WEBM, or AVI files."
+                      details:
+                        supportedFormats: ["mp4", "mov", "webm", "avi"]
+                        maxFileSize: "2GB"
+        '413':
+          description: File size exceeds limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported media type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /videos:
+    get:
+      summary: List and search videos
+      description: Retrieve a paginated list of videos with optional filtering and search capabilities
+      operationId: listVideos
+      tags:
+        - Video Management
+      parameters:
+        - name: status
+          in: query
+          description: Filter by video processing status
+          required: false
+          schema:
+            type: string
+            enum: [pending, processing, ready, failed]
+        - name: search
+          in: query
+          description: Search in video titles (partial match)
+          required: false
+          schema:
+            type: string
+            example: "nature"
+        - name: tags
+          in: query
+          description: Filter by tags (comma-separated)
+          required: false
+          schema:
+            type: string
+            example: "landscape,nature"
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sortBy
+          in: query
+          description: Field to sort by
+          required: false
+          schema:
+            type: string
+            enum: [createdAt, title, duration]
+            default: createdAt
+        - name: sortOrder
+          in: query
+          description: Sort direction
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of videos retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoListResponse'
+
+  /videos/{videoId}:
+    get:
+      summary: Get video details
+      description: Retrieve detailed information about a specific video including processing status and available outputs
+      operationId: getVideo
+      tags:
+        - Video Management
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          description: Unique identifier for the video
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Video details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoDetailResponse'
+        '404':
+          description: Video not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                data: null
+                statusCode: 404
+                error:
+                  code: "VIDEO_NOT_FOUND"
+                  message: "Video with ID 550e8400-e29b-41d4-a716-446655440000 not found."
+
+  /videos/{videoId}/status:
+    get:
+      summary: Get video processing status
+      description: Get real-time processing status for polling and progress tracking
+      operationId: getVideoStatus
+      tags:
+        - Video Management
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          description: Unique identifier for the video
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Video status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoStatusResponse'
+        '404':
+          description: Video not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /videos/{videoId}/thumbnail:
+    get:
+      summary: Get video thumbnail
+      description: Retrieve the thumbnail image for a video
+      operationId: getVideoThumbnail
+      tags:
+        - Video Streaming
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          description: Unique identifier for the video
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Thumbnail image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              description: Cache control header
+              schema:
+                type: string
+                example: "public, max-age=86400"
+        '404':
+          description: Video or thumbnail not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /stream/{videoId}/{resolution}/playlist.m3u8:
+    get:
+      summary: Get HLS playlist
+      description: Retrieve the HLS master playlist or resolution-specific playlist for video streaming
+      operationId: getHLSPlaylist
+      tags:
+        - Video Streaming
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          description: Unique identifier for the video
+          schema:
+            type: string
+            format: uuid
+        - name: resolution
+          in: path
+          required: true
+          description: Video resolution
+          schema:
+            type: string
+            enum: [480p, 720p, 1080p]
+            example: "1080p"
+      responses:
+        '200':
+          description: HLS playlist file
+          content:
+            application/vnd.apple.mpegurl:
+              schema:
+                type: string
+                example: |
+                  #EXTM3U
+                  #EXT-X-VERSION:3
+                  #EXT-X-TARGETDURATION:10
+                  #EXT-X-MEDIA-SEQUENCE:0
+                  #EXTINF:10.0,
+                  segment_0000.ts
+                  #EXTINF:10.0,
+                  segment_0001.ts
+                  #EXT-X-ENDLIST
+          headers:
+            Cache-Control:
+              description: Cache control header
+              schema:
+                type: string
+                example: "public, max-age=300"
+        '404':
+          description: Video or resolution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /stream/{videoId}/{resolution}/{segment}:
+    get:
+      summary: Get HLS video segment
+      description: Retrieve individual HLS video segments (.ts files)
+      operationId: getHLSSegment
+      tags:
+        - Video Streaming
+      parameters:
+        - name: videoId
+          in: path
+          required: true
+          description: Unique identifier for the video
+          schema:
+            type: string
+            format: uuid
+        - name: resolution
+          in: path
+          required: true
+          description: Video resolution
+          schema:
+            type: string
+            enum: [480p, 720p, 1080p]
+        - name: segment
+          in: path
+          required: true
+          description: Segment filename
+          schema:
+            type: string
+            pattern: '^segment_\d{4}\.ts$'
+            example: "segment_0001.ts"
+      responses:
+        '200':
+          description: Video segment binary data
+          content:
+            video/mp2t:
+              schema:
+                type: string
+                format: binary
+          headers:
+            Cache-Control:
+              description: Cache control header
+              schema:
+                type: string
+                example: "public, max-age=31536000"
+            Accept-Ranges:
+              description: Accept ranges header
+              schema:
+                type: string
+                example: "bytes"
+        '404':
+          description: Video segment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      summary: System health check
+      description: Check the overall health and status of the system and its dependencies
+      operationId: getHealth
+      tags:
+        - System
+      responses:
+        '200':
+          description: System health information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /stats:
+    get:
+      summary: System statistics
+      description: Retrieve comprehensive system statistics and metrics
+      operationId: getStats
+      tags:
+        - System
+      responses:
+        '200':
+          description: System statistics and metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+
+components:
+  schemas:
+    # Base response schemas
+    BaseResponse:
+      type: object
+      required:
+        - statusCode
+        - error
+      properties:
+        statusCode:
+          type: integer
+          description: HTTP status code
+          example: 200
+        error:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/Error'
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code
+          example: "VIDEO_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Video not found"
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              type: 'null'
+
+    # Video-related schemas
+    VideoSummary:
+      type: object
+      required:
+        - id
+        - title
+        - status
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique video identifier
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        title:
+          type: string
+          description: Video title
+          example: "Beautiful Nature Scenery"
+        description:
+          type: string
+          nullable: true
+          description: Video description
+          example: "Stunning landscapes from around the world"
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+          description: Current processing status
+          example: "ready"
+        duration:
+          type: integer
+          nullable: true
+          description: Video duration in seconds
+          example: 245
+        fileSize:
+          type: integer
+          format: int64
+          description: Original file size in bytes
+          example: 104857600
+        tags:
+          type: array
+          items:
+            type: string
+          description: Video tags
+          example: ["nature", "landscape", "4k"]
+        thumbnail:
+          type: string
+          nullable: true
+          description: Thumbnail URL
+          example: "/api/v1/videos/550e8400-e29b-41d4-a716-446655440000/thumbnail"
+        createdAt:
+          type: string
+          format: date-time
+          description: Upload timestamp
+          example: "2025-05-28T10:30:00Z"
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Processing completion timestamp
+          example: "2025-05-28T10:35:00Z"
+        availableResolutions:
+          type: array
+          items:
+            type: string
+            enum: [480p, 720p, 1080p]
+          description: Available streaming resolutions
+          example: ["480p", "720p", "1080p"]
+        streamingUrls:
+          type: object
+          description: HLS streaming URLs for each resolution
+          additionalProperties:
+            type: string
+          example:
+            "480p": "/api/v1/stream/550e8400-e29b-41d4-a716-446655440000/480p/playlist.m3u8"
+            "720p": "/api/v1/stream/550e8400-e29b-41d4-a716-446655440000/720p/playlist.m3u8"
+            "1080p": "/api/v1/stream/550e8400-e29b-41d4-a716-446655440000/1080p/playlist.m3u8"
+
+    VideoDetail:
+      allOf:
+        - $ref: '#/components/schemas/VideoSummary'
+        - type: object
+          properties:
+            originalFilename:
+              type: string
+              description: Original uploaded filename
+              example: "nature_4k.mp4"
+            mimeType:
+              type: string
+              description: MIME type of original file
+              example: "video/mp4"
+            outputs:
+              type: array
+              items:
+                $ref: '#/components/schemas/VideoOutput'
+              description: Available video outputs/resolutions
+            processingHistory:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProcessingHistoryEntry'
+              description: Processing status history
+
+    VideoOutput:
+      type: object
+      required:
+        - resolution
+        - width
+        - height
+        - bitrate
+        - status
+        - playlistUrl
+      properties:
+        resolution:
+          type: string
+          enum: [480p, 720p, 1080p]
+          description: Video resolution
+          example: "1080p"
+        width:
+          type: integer
+          description: Video width in pixels
+          example: 1920
+        height:
+          type: integer
+          description: Video height in pixels
+          example: 1080
+        bitrate:
+          type: integer
+          description: Video bitrate in kbps
+          example: 5000
+        fileSize:
+          type: integer
+          format: int64
+          nullable: true
+          description: Total size of segments and playlist in bytes
+          example: 83886080
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+          description: Output processing status
+          example: "ready"
+        playlistUrl:
+          type: string
+          description: URL to HLS playlist for this resolution
+          example: "/api/v1/stream/550e8400-e29b-41d4-a716-446655440000/1080p/playlist.m3u8"
+
+    ProcessingHistoryEntry:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          enum: [pending, processing, ready, failed]
+          description: Processing status
+          example: "ready"
+        timestamp:
+          type: string
+          format: date-time
+          description: Status change timestamp
+          example: "2025-05-28T10:35:00Z"
+
+    Pagination:
+      type: object
+      required:
+        - currentPage
+        - totalPages
+        - totalItems
+        - itemsPerPage
+        - hasNextPage
+        - hasPreviousPage
+      properties:
+        currentPage:
+          type: integer
+          description: Current page number
+          example: 1
+        totalPages:
+          type: integer
+          description: Total number of pages
+          example: 5
+        totalItems:
+          type: integer
+          description: Total number of items
+          example: 87
+        itemsPerPage:
+          type: integer
+          description: Number of items per page
+          example: 20
+        hasNextPage:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        hasPreviousPage:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+
+    # Response schemas
+    UploadResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              type: object
+              required:
+                - id
+                - title
+                - status
+                - originalFilename
+                - fileSize
+                - uploadedAt
+                - estimatedProcessingTime
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                title:
+                  type: string
+                  example: "My Video Title"
+                status:
+                  type: string
+                  enum: [pending]
+                  example: "pending"
+                originalFilename:
+                  type: string
+                  example: "sample.mp4"
+                fileSize:
+                  type: integer
+                  format: int64
+                  example: 104857600
+                uploadedAt:
+                  type: string
+                  format: date-time
+                  example: "2025-05-28T10:30:00Z"
+                estimatedProcessingTime:
+                  type: string
+                  example: "5-10 minutes"
+
+    VideoListResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              type: object
+              required:
+                - videos
+                - pagination
+              properties:
+                videos:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/VideoSummary'
+                pagination:
+                  $ref: '#/components/schemas/Pagination'
+
+    VideoDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              $ref: '#/components/schemas/VideoDetail'
+
+    VideoStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              type: object
+              required:
+                - id
+                - status
+                - lastUpdated
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                status:
+                  type: string
+                  enum: [pending, processing, ready, failed]
+                  example: "processing"
+                progress:
+                  type: integer
+                  minimum: 0
+                  maximum: 100
+                  nullable: true
+                  description: Processing progress percentage
+                  example: 65
+                estimatedTimeRemaining:
+                  type: string
+                  nullable: true
+                  description: Estimated time remaining
+                  example: "2 minutes"
+                currentTask:
+                  type: string
+                  nullable: true
+                  description: Current processing task
+                  example: "Transcoding 1080p resolution"
+                completedResolutions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [480p, 720p, 1080p]
+                  description: Completed resolution outputs
+                  example: ["480p"]
+                failedResolutions:
+                  type: array
+                  items:
+                    type: string
+                    enum: [480p, 720p, 1080p]
+                  description: Failed resolution outputs
+                  example: []
+                lastUpdated:
+                  type: string
+                  format: date-time
+                  description: Last status update timestamp
+                  example: "2025-05-28T10:33:00Z"
+
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              type: object
+              required:
+                - status
+                - timestamp
+                - version
+                - services
+                - stats
+              properties:
+                status:
+                  type: string
+                  enum: [healthy, degraded, unhealthy]
+                  example: "healthy"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2025-05-28T10:30:00Z"
+                version:
+                  type: string
+                  example: "1.0.0"
+                services:
+                  type: object
+                  properties:
+                    database:
+                      type: string
+                      enum: [connected, disconnected, error]
+                      example: "connected"
+                    redis:
+                      type: string
+                      enum: [connected, disconnected, error]
+                      example: "connected"
+                    storage:
+                      type: string
+                      enum: [available, unavailable, error]
+                      example: "available"
+                stats:
+                  type: object
+                  properties:
+                    totalVideos:
+                      type: integer
+                      example: 87
+                    videosReady:
+                      type: integer
+                      example: 82
+                    videosProcessing:
+                      type: integer
+                      example: 3
+                    videosFailed:
+                      type: integer
+                      example: 2
+                    queueSize:
+                      type: integer
+                      example: 5
+                    storageUsed:
+                      type: string
+                      example: "45.2GB"
+
+    StatsResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          required:
+            - data
+          properties:
+            data:
+              type: object
+              required:
+                - overview
+                - processingStats
+                - popularResolutions
+                - recentActivity
+              properties:
+                overview:
+                  type: object
+                  properties:
+                    totalVideos:
+                      type: integer
+                      example: 87
+                    totalViews:
+                      type: integer
+                      example: 1250
+                    totalStorageUsed:
+                      type: integer
+                      format: int64
+                      description: Total storage used in bytes
+                      example: 48318382080
+                    averageProcessingTime:
+                      type: integer
+                      description: Average processing time in seconds
+                      example: 285
+                processingStats:
+                  type: object
+                  properties:
+                    videosReady:
+                      type: integer
+                      example: 82
+                    videosProcessing:
+                      type: integer
+                      example: 3
+                    videosPending:
+                      type: integer
+                      example: 0
+                    videosFailed:
+                      type: integer
+                      example: 2
+                    successRate:
+                      type: number
+                      format: float
+                      description: Success rate percentage
+                      example: 94.3
+                popularResolutions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      resolution:
+                        type: string
+                        enum: [480p, 720p, 1080p]
+                        example: "1080p"
+                      count:
+                        type: integer
+                        example: 65
+                recentActivity:
+                  type: object
+                  properties:
+                    uploadsToday:
+                      type: integer
+                      example: 12
+                    uploadsThisWeek:
+                      type: integer
+                      example: 28
+                    processingTimeToday:
+                      type: integer
+                      description: Total processing time today in seconds
+                      example: 3420
+
+  # Security schemes (for future authentication)
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication (future feature)
+
+tags:
+  - name: Video Management
+    description: Video upload, listing, and metadata operations
+  - name: Video Streaming
+    description: HLS streaming and thumbnail operations
+  - name: System
+    description: System health and statistics endpoints
