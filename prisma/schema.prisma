@@ -6,7 +6,7 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  // output   = "../generated/prisma"
 }
 
 datasource db {
@@ -131,6 +131,7 @@ model TranscodingJob {
   // Timestamps
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
   startedAt   DateTime? @map("started_at") @db.Timestamptz
+  updatedAt   DateTime? @map("updated_at") @db.Timestamptz
   completedAt DateTime? @map("completed_at") @db.Timestamptz
   nextRetryAt DateTime? @map("next_retry_at") @db.Timestamptz
 
