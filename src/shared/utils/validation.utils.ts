@@ -4,6 +4,7 @@ import { MAX_FILE_SIZE } from '../constants/file-types.constant';
 
 export class ValidationUtils {
   static validateVideoFile(file: Express.Multer.File): void {
+    // is there a file
     if (!file) {
       throw new BadRequestException({
         code: 'FILE_REQUIRED',
@@ -11,6 +12,7 @@ export class ValidationUtils {
       });
     }
 
+    // is the mime type supported
     const normalizedMime = FileUtils.normalizeMimeType(file.mimetype);
     if (!FileUtils.isVideoFile(normalizedMime)) {
       throw new BadRequestException({
@@ -24,6 +26,7 @@ export class ValidationUtils {
       });
     }
 
+    // does meet the size requirement
     if (file.size > MAX_FILE_SIZE) {
       throw new BadRequestException({
         code: 'FILE_TOO_LARGE',
