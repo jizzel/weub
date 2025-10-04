@@ -143,7 +143,7 @@ export class VideosService {
       this.prismaService.video.findMany({
         where,
         skip,
-        take: limit,
+        take: Number(limit),
         orderBy: { [sortBy]: sortOrder },
         include: {
           outputs: {
