@@ -20,7 +20,11 @@ export class PaginationQueryDto {
   @IsOptional()
   sortBy?: string = 'createdAt';
 
-  @ApiProperty({ description: 'Sort direction', enum: ['asc', 'desc'], required: false })
+  @ApiProperty({
+    description: 'Sort direction',
+    enum: ['asc', 'desc'],
+    required: false,
+  })
   @IsOptional()
   sortOrder?: 'asc' | 'desc' = 'desc';
 }
