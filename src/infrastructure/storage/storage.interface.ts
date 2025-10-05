@@ -15,3 +15,5 @@ export interface IStorageService {
   getSegmentPath(videoId: string, resolution: string, segment: string): string;
   getThumbnailPath(videoId: string): string;
 }
+
+export const STORAGE_SERVICE = 'STORAGE_SERVICE';

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import queueConfig from './configs/queue.config';
+import storageConfig from './configs/storage.config';
 // import { validate } from './env/env.validate';
 
 @Module({
@@ -9,8 +10,9 @@ import queueConfig from './configs/queue.config';
       isGlobal: true,
       // validate,
       envFilePath: ['.env.local', '.env'],
-      load: [queueConfig],
+      load: [queueConfig, storageConfig],
     }),
   ],
+  exports: [ConfigModule],
 })
 export class AppConfigModule {}

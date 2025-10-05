@@ -1,9 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { PrismaService } from '../../../../core/config/prisma/prisma/prisma.service';
-import { StorageService } from '../../../../infrastructure/storage/storage/storage.service';
 import { VideoNotFoundException } from '../../../../core/exceptions/custom-exceptions';
 import { VideoStatus } from '../../../../shared/enums/video-status.enum';
+import {
+  type IStorageService,
+  STORAGE_SERVICE,
+} from '../../../../infrastructure/storage/storage.interface';
 
 @Injectable()
 export class StreamingService {
@@ -11,7 +14,7 @@ export class StreamingService {
 
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly storageService: StorageService,
+    @Inject(STORAGE_SERVICE) private readonly storageService: IStorageService,
   ) {}
 
   async getPlaylist(videoId: string, resolution: string): Promise<string> {
