@@ -63,6 +63,7 @@ model Video {
   // Search and filtering
   tags        String[] @default([])
   description String?  @db.Text
+  thumbnailPath String?  @map("thumbnail_path") @db.Text
 
   // Relations
   outputs         VideoOutput[]

@@ -20,7 +20,7 @@ export class TranscodingService {
   private readonly logger = new Logger(TranscodingService.name);
   private readonly hlsOutputDir: string;
 
-  // private readonly thumbnailOutputDir: string;
+  private readonly thumbnailOutputDir: string;
 
   constructor(
     private readonly prismaService: PrismaService,
@@ -31,9 +31,10 @@ export class TranscodingService {
       this.configService.get<string>('storage.hlsPath') ||
       resolve(process.cwd(), '..', 'storage/hls');
       // join(process.cwd(), 'storage/hls');
-    // this.thumbnailOutputDir =
-    //   this.configService.get<string>('storage.thumbnailPath') ||
-    //   join(process.cwd(), 'storage/thumbnails');
+    this.thumbnailOutputDir =
+      this.configService.get<string>('storage.thumbnailPath') ||
+      resolve(process.cwd(), '..', 'storage/thumbnails');
+      // join(process.cwd(), 'storage/thumbnails');
   }
 
   async processVideo(jobData: TranscodingJobData): Promise<TranscodingResult> {
@@ -49,12 +50,12 @@ export class TranscodingService {
 
       // Create output directories for this video
       const videoOutputDir = join(this.hlsOutputDir, videoId);
-      // const videoThumbnailDir = join(this.thumbnailOutputDir, videoId);
+      const videoThumbnailDir = join(this.thumbnailOutputDir, videoId);
 
       // Ensure output directories exist
       await Promise.all([
         fs.mkdir(videoOutputDir, { recursive: true }),
-        // fs.mkdir(videoThumbnailDir, { recursive: true }),
+        fs.mkdir(videoThumbnailDir, { recursive: true }),
       ]);
 
       const currentProgress = 0;
@@ -103,23 +104,23 @@ export class TranscodingService {
       // currentProgress = resolutions.length;
 
       // Generate thumbnail
-      // this.logger.log('Generating thumbnail...');
-      // await this.updateJobProgress(videoId, {
-      //   percent: Math.round((currentProgress / totalTasks) * 100),
-      //   currentResolution: 'thumbnail',
-      //   completedResolutions: outputs.map((o) => o.resolution),
-      //   currentTask: 'Generating thumbnail',
-      //   estimatedTimeRemaining: this.calculateETA(
-      //     (currentProgress / totalTasks) * 100,
-      //     startTime,
-      //   ),
-      // });
+      this.logger.log('Generating thumbnail...');
+      await this.updateJobProgress(videoId, {
+        percent: Math.round((currentProgress / totalTasks) * 100),
+        currentResolution: 'thumbnail',
+        completedResolutions: outputs.map((o) => o.resolution),
+        currentTask: 'Generating thumbnail',
+        estimatedTimeRemaining: this.calculateETA(
+          (currentProgress / totalTasks) * 100,
+          startTime,
+        ),
+      });
 
-      // const thumbnailPath = await this.ffmpegService.generateThumbnail(
-      //   inputPath,
-      //   videoThumbnailDir,
-      //   Math.min(10, metadata.duration / 2), // 10 seconds or half duration
-      // );
+      const thumbnailPath = await this.ffmpegService.generateThumbnail(
+        inputPath,
+        videoThumbnailDir,
+        Math.min(10, metadata.duration / 2), // 10 seconds or half duration
+      );
 
       // Generate master playlist (this is now handled by FfmpegService)
       const masterPlaylistPath = join(videoOutputDir, 'master.m3u8');
@@ -128,8 +129,8 @@ export class TranscodingService {
       await this.saveOutputsToDatabase(
         videoId,
         outputs,
-        // thumbnailPath,
-        // masterPlaylistPath,
+        thumbnailPath,
+        masterPlaylistPath,
       );
 
       // Update video status to ready
@@ -151,7 +152,7 @@ export class TranscodingService {
         success: true,
         outputs,
         duration: metadata.duration,
-        // thumbnail: thumbnailPath,
+        thumbnail: thumbnailPath,
       };
     } catch (error) {
       this.logger.error(
@@ -264,8 +265,8 @@ export class TranscodingService {
   private async saveOutputsToDatabase(
     videoId: string,
     outputs: TranscodingOutput[],
-    // thumbnailPath: string = '',
-    // masterPlaylistPath: string,
+    thumbnailPath: string = '',
+    masterPlaylistPath: string,
   ): Promise<void> {
     try {
       // Save video outputs
@@ -292,17 +293,14 @@ export class TranscodingService {
         });
       }
 
-      // Update video with thumbnail and master playlist
-      // await this.prismaService.video.update({
-      //   where: { id: videoId },
-      //   data: {
-      //     processingData: {
-      //       // thumbnailPath,
-      //       masterPlaylistPath,
-      //       totalOutputs: outputs.length,
-      //     },
-      //   },
-      // });
+      // Update video with thumbnail path
+      await this.prismaService.video.update({
+        where: { id: videoId },
+        data: {
+          thumbnailPath: thumbnailPath,
+          // masterPlaylistPath could also be stored here if needed
+        },
+      });
 
       this.logger.log(
         `Saved ${outputs.length} outputs to database for video: ${videoId}`,

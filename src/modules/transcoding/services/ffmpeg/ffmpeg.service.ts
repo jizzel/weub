@@ -292,39 +292,39 @@ export class FfmpegService {
     this.logger.log(`Master playlist created: ${masterPlaylistPath}`);
   }
 
-  // async generateThumbnail(
-  //   inputPath: string,
-  //   outputDir: string,
-  //   timestamp = 10,
-  // ): Promise<string> {
-  //   await fs.mkdir(outputDir, { recursive: true });
-  //
-  //   const thumbnailPath = join(outputDir, 'thumbnail.jpg');
-  //
-  //   return new Promise((resolve, reject) => {
-  //     ffmpeg(inputPath)
-  //       .seekInput(timestamp)
-  //       .frames(1)
-  //       .size('320x240')
-  //       .outputOptions([
-  //         '-vf scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2',
-  //         '-q:v 2', // High quality JPEG
-  //       ])
-  //       .output(thumbnailPath)
-  //       .on('start', (commandLine) => {
-  //         this.logger.debug(`Thumbnail FFmpeg command: ${commandLine}`);
-  //       })
-  //       .on('end', () => {
-  //         this.logger.log(`Thumbnail generated: ${thumbnailPath}`);
-  //         resolve(thumbnailPath);
-  //       })
-  //       .on('error', (error) => {
-  //         this.logger.error(`Thumbnail generation failed: ${error.message}`);
-  //         reject(error);
-  //       })
-  //       .run();
-  //   });
-  // }
+  async generateThumbnail(
+    inputPath: string,
+    outputDir: string,
+    timestamp = 10,
+  ): Promise<string> {
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const thumbnailPath = join(outputDir, 'thumbnail.jpg');
+
+    return new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .seekInput(timestamp)
+        .frames(1)
+        .size('320x240')
+        .outputOptions([
+          '-vf scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2',
+          '-q:v 2', // High quality JPEG
+        ])
+        .output(thumbnailPath)
+        .on('start', (commandLine) => {
+          this.logger.debug(`Thumbnail FFmpeg command: ${commandLine}`);
+        })
+        .on('end', () => {
+          this.logger.log(`Thumbnail generated: ${thumbnailPath}`);
+          resolve(thumbnailPath);
+        })
+        .on('error', (error) => {
+          this.logger.error(`Thumbnail generation failed: ${error.message}`);
+          reject(error);
+        })
+        .run();
+    });
+  }
 
   async cleanupFiles(paths: string[]): Promise<void> {
     const cleanupPromises = paths.map(async (path) => {

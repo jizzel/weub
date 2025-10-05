@@ -303,9 +303,9 @@ export class VideosService {
       duration: video.durationSeconds,
       fileSize: Number(video.fileSize),
       tags: video.tags,
-      thumbnail:
-        video.status === 'READY'
-          ? `/api/v1/videos/${video.id}/thumbnail`
+      thumbnail: // Use the stored path to generate the URL
+        video.status === 'READY' && video.thumbnailPath
+          ? `/api/v1/videos/${video.id}/thumbnail.jpg`
           : undefined,
       createdAt: video.createdAt,
       processedAt: video.processedAt,
@@ -350,9 +350,9 @@ export class VideosService {
       outputs,
       availableResolutions,
       streamingUrls,
-      thumbnail:
-        video.status === 'READY'
-          ? `/api/v1/videos/${video.id}/thumbnail`
+      thumbnail: // Use the stored path to generate the URL
+        video.status === 'READY' && video.thumbnailPath
+          ? `/api/v1/videos/${video.id}/thumbnail.jpg`
           : undefined,
     };
   }

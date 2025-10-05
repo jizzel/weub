@@ -191,7 +191,7 @@ export class StreamingController {
     }
   }
 
-  @Get('videos/:id/thumbnail')
+  @Get('videos/:id/thumbnail.jpg')
   @ApiOperation({
     summary: 'Get video thumbnail',
     description: 'Retrieve the thumbnail image for a video',
