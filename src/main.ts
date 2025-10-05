@@ -16,8 +16,6 @@ async function bootstrap() {
     .setDescription('A minimal video streaming application API')
     .setVersion('1.0')
     .addTag('videos', 'Video management endpoints')
-    .addTag('streaming', 'Video streaming endpoints')
-    .addTag('health', 'System health endpoints')
     .build();
 
   const documentFactory = () => SwaggerModule.createDocument(app, config);
