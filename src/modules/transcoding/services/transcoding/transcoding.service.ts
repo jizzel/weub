@@ -181,7 +181,10 @@ export class TranscodingService {
           height: output.height,
           bitrate: output.bitrate,
           playlistPath: output.playlistPath,
-          segmentDirectory: `hls/${videoId}/${output.resolution}`,
+          segmentDirectory: this.storageService.getHLSOutputPath(
+            videoId,
+            output.resolution,
+          ),
           fileSize: BigInt(output.fileSize),
           segmentCount: output.segmentPaths?.length || 0,
           segmentDuration: VIDEO_PROCESSING_CONFIG.segmentDuration,
