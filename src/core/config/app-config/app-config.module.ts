@@ -13,6 +13,5 @@ import storageConfig from './configs/storage.config';
       load: [queueConfig, storageConfig],
     }),
   ],
-  exports: [ConfigModule],
 })
 export class AppConfigModule {}
