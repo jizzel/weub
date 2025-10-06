@@ -9,7 +9,7 @@ import { S3StorageService } from './s3-storage/s3-storage.service';
 const storageServiceProvider: Provider = {
   provide: STORAGE_SERVICE,
   useFactory: (configService: ConfigService) => {
-    const driver = configService.get<string>('storage.driver');
+    const driver = configService.get<StorageDriver>('storage.driver');
     if (driver === StorageDriver.S3) {
       return new S3StorageService(configService);
     }
