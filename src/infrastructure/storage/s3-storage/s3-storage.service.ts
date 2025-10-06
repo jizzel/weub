@@ -8,9 +8,10 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { ConfigService } from '@nestjs/config';
-import { Readable } from 'stream';
+import { ConfigService, ConfigType } from '@nestjs/config';
 import { IStorageService } from '../storage.interface';
+import { posix } from 'path';
+import storageConfig from '../../../core/config/app-config/configs/storage.config';
 
 @Injectable()
 export class S3StorageService implements IStorageService {
@@ -20,15 +21,23 @@ export class S3StorageService implements IStorageService {
   private readonly baseStoragePath: string;
 
   constructor(private readonly configService: ConfigService) {
-    const storageConfiguration = this.configService.get('storage');
+    const storageConfiguration: ConfigType<typeof storageConfig> | undefined =
+      this.configService.get('storage');
     if (!storageConfiguration) {
       throw new Error(
         'FATAL: Storage configuration not found. Ensure that storage.config.ts is being loaded in AppConfigModule.',
       );
     }
 
-    if (!storageConfiguration.r2) {
-      throw new Error('FATAL: R2 configuration not found in storage configuration.');
+    if (
+      !storageConfiguration.r2.endpoint ||
+      !storageConfiguration.r2.accessKeyId ||
+      !storageConfiguration.r2.secretAccessKey ||
+      !storageConfiguration.r2.bucket
+    ) {
+      throw new Error(
+        'FATAL: R2 configuration not found in storage configuration.',
+      );
     }
 
     this.s3 = new S3Client({
@@ -44,7 +53,7 @@ export class S3StorageService implements IStorageService {
   }
 
   private getS3Key(path: string): string {
-    return path;
+    return posix.join(this.baseStoragePath, path);
   }
 
   async saveFile(buffer: Buffer, path: string): Promise<string> {
@@ -68,13 +77,12 @@ export class S3StorageService implements IStorageService {
     });
 
     const response = await this.s3.send(command);
-    const stream = response.Body as Readable;
-    return new Promise<Buffer>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      stream.on('data', (chunk) => chunks.push(chunk));
-      stream.on('error', reject);
-      stream.on('end', () => resolve(Buffer.concat(chunks)));
-    });
+    if (!response.Body) {
+      throw new Error(`File not found or empty at path: ${path}`);
+    }
+
+    const byteArray = await response.Body.transformToByteArray();
+    return Buffer.from(byteArray);
   }
 
   async deleteFile(path: string): Promise<void> {
@@ -143,22 +151,22 @@ export class S3StorageService implements IStorageService {
   }
 
   getVideoUploadPath(videoId: string, extension: string): string {
-    return `uploads/raw/${videoId}${extension}`;
+    return posix.join('uploads', 'raw', `${videoId}${extension}`);
   }
 
   getHLSOutputPath(videoId: string, resolution: string): string {
-    return `hls/${videoId}/${resolution}`;
+    return posix.join('hls', videoId, resolution);
   }
 
   getPlaylistPath(videoId: string, resolution: string): string {
-    return `hls/${videoId}/${resolution}/playlist.m3u8`;
+    return posix.join('hls', videoId, resolution, 'playlist.m3u8');
   }
 
   getSegmentPath(videoId: string, resolution: string, segment: string): string {
-    return `hls/${videoId}/${resolution}/${segment}`;
+    return posix.join('hls', videoId, resolution, segment);
   }
 
   getThumbnailPath(videoId: string): string {
-    return `thumbnails/${videoId}/thumbnail.jpg`;
+    return posix.join('thumbnails', videoId, 'thumbnail.jpg');
   }
 }
