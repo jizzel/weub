@@ -127,26 +127,35 @@ export class S3StorageService implements IStorageService {
 
   async deleteDirectory(path: string): Promise<void> {
     const prefix = this.getS3Key(path) + '/';
+    let continuationToken: string | undefined;
 
-    const listCommand = new ListObjectsV2Command({
-      Bucket: this.bucket,
-      Prefix: prefix,
-    });
+    do {
+      const listCommand = new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      });
 
-    const listedObjects = await this.s3.send(listCommand);
+      const listedObjects = await this.s3.send(listCommand);
 
-    if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
-      return;
-    }
+      if (!listedObjects.Contents || listedObjects.Contents.length === 0) {
+        break;
+      }
 
-    const deleteCommand = new DeleteObjectsCommand({
-      Bucket: this.bucket,
-      Delete: {
-        Objects: listedObjects.Contents.map((obj) => ({ Key: obj.Key })),
-      },
-    });
+      const deleteCommand = new DeleteObjectsCommand({
+        Bucket: this.bucket,
+        Delete: {
+          Objects: listedObjects.Contents.map((obj) => ({ Key: obj.Key })),
+        },
+      });
 
-    await this.s3.send(deleteCommand);
+      await this.s3.send(deleteCommand);
+      this.logger.log(
+        `Deleted ${listedObjects.Contents.length} objects from S3 directory: ${prefix}`,
+      );
+      continuationToken = listedObjects.NextContinuationToken;
+    } while (continuationToken);
+
     this.logger.log(`Directory deleted from S3: ${prefix}`);
   }
 
