@@ -3,15 +3,17 @@ import { existsSync, mkdirSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { IStorageService } from '../storage.interface';
 import { promises as fs } from 'fs';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class LocalStorageService implements IStorageService {
   private readonly logger = new Logger(LocalStorageService.name);
   private readonly baseStoragePath: string;
 
-  constructor() {
+  constructor(private readonly configService: ConfigService) {
     this.baseStoragePath =
-      process.env.STORAGE_PATH || resolve(process.cwd(), '..', 'storage');
+      this.configService.get<string>('storage.path') ||
+      resolve(process.cwd(), '..', 'storage');
     this.ensureDirectoriesExist();
   }
 

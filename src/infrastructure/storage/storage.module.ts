@@ -13,7 +13,7 @@ const storageServiceProvider: Provider = {
     if (driver === StorageDriver.S3) {
       return new S3StorageService(configService);
     }
-    return new LocalStorageService();
+    return new LocalStorageService(configService);
   },
   inject: [ConfigService],
 };
