@@ -65,8 +65,8 @@ export class S3StorageService implements IStorageService {
     });
 
     await this.s3.send(command);
-    this.logger.log(`File saved to S3: ${key}`);
-    return key;
+    this.logger.log(`File saved to S3 at relative path: ${path}`);
+    return path;
   }
 
   async getFile(path: string): Promise<Buffer> {
