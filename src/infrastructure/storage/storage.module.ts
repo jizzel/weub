@@ -10,7 +10,6 @@ const storageServiceProvider: Provider = {
   provide: STORAGE_SERVICE,
   useFactory: (configService: ConfigService) => {
     const driver = configService.get<string>('storage.driver');
-    console.log(driver);
     if (driver === StorageDriver.S3) {
       return new S3StorageService(configService);
     }

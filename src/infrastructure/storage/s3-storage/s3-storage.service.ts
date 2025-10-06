@@ -21,7 +21,6 @@ export class S3StorageService implements IStorageService {
 
   constructor(private readonly configService: ConfigService) {
     const storageConfiguration = this.configService.get('storage');
-    console.log(storageConfiguration);
     if (!storageConfiguration) {
       throw new Error(
         'FATAL: Storage configuration not found. Ensure that storage.config.ts is being loaded in AppConfigModule.',
