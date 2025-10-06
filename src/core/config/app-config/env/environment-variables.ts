@@ -36,9 +36,6 @@ export class EnvironmentVariables {
   APP_ENV: AppEnv = AppEnv.Development;
 
   @IsString()
-  RESET_DB: string;
-
-  @IsString()
   QUEUE_RETRY_ATTEMPTS: string;
 
   @IsString()
