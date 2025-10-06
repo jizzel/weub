@@ -1,8 +1,8 @@
 {
   "name": "weub",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "weub is a video upload, processing, and streaming service",
+  "author": "Joseph Afriyie Attakorah",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
