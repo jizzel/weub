@@ -307,45 +307,38 @@ export class FfmpegService {
   }
 
   async getVideoMetadata(inputPath: string): Promise<VideoMetadata> {
-    const tempDir = await fs.mkdtemp(join(tmpdir(), 'probe-'));
-    const localInputPath = join(tempDir, basename(inputPath));
+    const fileBuffer = await this.storageService.getFile(inputPath);
+    const readableStream = Readable.from(fileBuffer);
 
-    try {
-      const fileBuffer = await this.storageService.getFile(inputPath);
-      await fs.writeFile(localInputPath, fileBuffer);
-
-      return await new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(localInputPath, (err, metadata) => {
-          if (err) {
-            return reject(
-              new Error(`Failed to get video metadata: ${err.message}`),
-            );
-          }
-          if (!metadata?.streams) {
-            return reject(new Error('Invalid metadata from ffprobe'));
-          }
-
-          const videoStream = metadata.streams.find(
-            (s) => s.codec_type === 'video',
+    return new Promise((resolve, reject) => {
+      ffmpeg(readableStream).ffprobe((err, metadata) => {
+        if (err) {
+          return reject(
+            new Error(`Failed to get video metadata: ${err.message}`),
           );
-          if (!videoStream) {
-            return reject(new Error('No video stream found'));
-          }
+        }
+        if (!metadata?.streams) {
+          return reject(new Error('Invalid metadata from ffprobe'));
+        }
 
-          resolve({
-            duration: metadata.format?.duration || 0,
-            width: videoStream.width || 0,
-            height: videoStream.height || 0,
-            bitrate: parseInt(String(metadata.format?.bit_rate || '0')),
-            fps: this.parseFps(videoStream.r_frame_rate || '0/1'),
-            codec: videoStream.codec_name || 'unknown',
-            size: (videoStream.width || 0) * (videoStream.height || 0),
-            aspectRatio: videoStream.display_aspect_ratio || '16:9',
-          });
+        const videoStream = metadata.streams.find(
+          (s) => s.codec_type === 'video',
+        );
+        if (!videoStream) {
+          return reject(new Error('No video stream found'));
+        }
+
+        resolve({
+          duration: metadata.format?.duration || 0,
+          width: videoStream.width || 0,
+          height: videoStream.height || 0,
+          bitrate: Number(metadata.format?.bit_rate) || 0,
+          fps: this.parseFps(videoStream.r_frame_rate || '0/1'),
+          codec: videoStream.codec_name || 'unknown',
+          size: (videoStream.width || 0) * (videoStream.height || 0),
+          aspectRatio: videoStream.display_aspect_ratio || '16:9',
         });
       });
-    } finally {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    }
+    });
   }
 }
