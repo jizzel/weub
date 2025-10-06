@@ -61,12 +61,9 @@ export class EnvironmentVariables {
 
   @IsEnum(StorageDriver)
   @IsOptional()
-  @IsIn(['local', 's3'], {
-    message: 'STORAGE_DRIVER must be either "local" or "s3"',
-  })
   @ValidateIf((o: EnvironmentVariables) => o.APP_ENV === AppEnv.Production)
   @IsIn(['s3'], {
-    message: 'STORAGE_PROVIDER must be "s3" in production environment',
+    message: 'STORAGE_DRIVER must be "s3" in production environment',
   })
   STORAGE_DRIVER: StorageDriver = StorageDriver.LOCAL;
 
