@@ -258,7 +258,7 @@ export class VideosService {
     };
   }
 
-  async deleteVideo(id: string): Promise<void> {
+  async deleteVideo(id: string): Promise<string> {
     const video = await this.prismaService.video.findUnique({
       where: { id },
       include: { outputs: true },
@@ -323,6 +323,8 @@ export class VideosService {
       // This requires a more complex cleanup strategy (e.g., a cron job).
       throw new Error('Failed to delete video from database.');
     }
+
+    return `Successfully deleted video ${id} and all associated files.`;
   }
 
   private async createTranscodingJob(

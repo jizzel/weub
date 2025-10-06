@@ -10,7 +10,6 @@ import {
   ParseUUIDPipe,
   HttpStatus,
   Delete,
-  HttpCode,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -143,17 +142,28 @@ export class VideosController {
   }
 
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a video and all its associated files' })
   @ApiResponse({
-    status: 204,
-    description: 'Video deleted successfully',
+    status: 200,
+    description: 'Video and all associated files deleted successfully.',
+    schema: {
+      example: {
+        statusCode: 200,
+        message: 'Successfully deleted video 123e4567-e89b-12d3-a456-426614174000 and all associated files.',
+        data: {
+          message: 'Successfully deleted video 123e4567-e89b-12d3-a456-426614174000 and all associated files.'
+        }
+      }
+    }
   })
   @ApiResponse({
     status: 404,
     description: 'Video not found',
   })
-  async deleteVideo(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.videosService.deleteVideo(id);
+  async deleteVideo(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BaseResponseDto<{ message: string }>> {
+    const message = await this.videosService.deleteVideo(id);
+    return BaseResponseDto.success({ message });
   }
 }
