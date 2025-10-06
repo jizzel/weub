@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateVideoDto } from '../dto/create-video.dto';
 import { VideoSearchDto } from '../dto/video-search.dto';
 import { VideoUploadService } from './video-upload.service';
@@ -20,6 +20,7 @@ import {
   ProducerService,
   TranscodingJobData,
 } from '../../../infrastructure/queue/producer/producer.service';
+import { IStorageService } from '../../../infrastructure/storage/storage.interface';
 
 @Injectable()
 export class VideosService {
@@ -28,7 +29,8 @@ export class VideosService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly videoUploadService: VideoUploadService,
-    private queueService: ProducerService,
+    private readonly queueService: ProducerService,
+    @Inject('STORAGE_SERVICE') private readonly storageService: IStorageService,
   ) {}
 
   async uploadVideo(
@@ -256,11 +258,77 @@ export class VideosService {
     };
   }
 
+  async deleteVideo(id: string): Promise<void> {
+    const video = await this.prismaService.video.findUnique({
+      where: { id },
+      include: { outputs: true },
+    });
+
+    if (!video) {
+      throw new NotFoundException(`Video with ID ${id} not found`);
+    }
+
+    this.logger.log(`Starting deletion process for video: ${id}`);
+
+    // 1. Collect all file paths to delete
+    const pathsToDelete: string[] = [];
+    if (video.uploadPath) {
+      pathsToDelete.push(video.uploadPath);
+    }
+    if (video.thumbnailPath) {
+      pathsToDelete.push(video.thumbnailPath);
+    }
+
+    // HLS files are stored in a directory per video, e.g., hls/<videoId>/
+    const hlsDirectory = `hls/${video.id}`;
+
+    // 2. Delete files from storage
+    try {
+      // Delete individual files
+      for (const path of pathsToDelete) {
+        if (await this.storageService.fileExists(path)) {
+          await this.storageService.deleteFile(path);
+          this.logger.log(`Deleted file from storage: ${path}`);
+        }
+      }
+
+      // Delete the entire HLS directory for the video
+      await this.storageService.deleteDirectory(hlsDirectory);
+      this.logger.log(`Deleted directory from storage: ${hlsDirectory}`);
+    } catch (error) {
+      this.logger.error(
+        `Error deleting files from storage for video ${id}: ${error.message}`,
+      );
+      // We can choose to continue and delete the DB record anyway, or throw
+      // For now, we log the error and proceed with DB deletion.
+    }
+
+    // 3. Delete database records in a transaction
+    try {
+      await this.prismaService.$transaction([
+        // Delete related records first
+        this.prismaService.videoOutput.deleteMany({ where: { videoId: id } }),
+        this.prismaService.transcodingJob.deleteMany({ where: { videoId: id } }),
+        // Finally, delete the main video record
+        this.prismaService.video.delete({ where: { id } }),
+      ]);
+      this.logger.log(
+        `Successfully deleted database records for video: ${id}`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error deleting database records for video ${id}: ${error.message}`,
+      );
+      // If DB deletion fails, we have an orphaned file situation.
+      // This requires a more complex cleanup strategy (e.g., a cron job).
+      throw new Error('Failed to delete video from database.');
+    }
+  }
+
   private async createTranscodingJob(
     videoId: string,
     path: string,
   ): Promise<void> {
-    // This will be implemented when we add the queue system
     this.logger.log(`Creating transcoding job for video ${videoId}`);
 
     await this.prismaService.transcodingJob.create({
@@ -315,6 +383,7 @@ export class VideosService {
   }
 
   private transformToDetailResponse(video: any): VideoDetailResponseDto {
+    // ... (existing transformToDetailResponse implementation)
     const outputs = video.outputs.map((output) => ({
       resolution: output.resolution,
       width: output.width,
@@ -358,7 +427,7 @@ export class VideosService {
   }
 
   private estimateProcessingTime(fileSize: number): string {
-    // Rough estimation: 1GB takes ~5-10 minutes
+    // ... (existing estimateProcessingTime implementation)
     const sizeInGB = fileSize / (1024 * 1024 * 1024);
     const minutes = Math.ceil(sizeInGB * 7.5);
 
@@ -372,6 +441,7 @@ export class VideosService {
   }
 
   private calculateTimeRemaining(progress: number): string | undefined {
+    // ... (existing calculateTimeRemaining implementation)
     if (progress === 0) return undefined;
 
     // Simple estimation based on progress

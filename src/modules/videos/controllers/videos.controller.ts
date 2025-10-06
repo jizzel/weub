@@ -9,6 +9,8 @@ import {
   Body,
   ParseUUIDPipe,
   HttpStatus,
+  Delete,
+  HttpCode,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -138,5 +140,20 @@ export class VideosController {
   ): Promise<BaseResponseDto<VideoStatusResponseDto>> {
     const result = await this.videosService.getVideoStatus(id);
     return BaseResponseDto.success(result);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a video and all its associated files' })
+  @ApiResponse({
+    status: 204,
+    description: 'Video deleted successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Video not found',
+  })
+  async deleteVideo(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
+    await this.videosService.deleteVideo(id);
   }
 }
