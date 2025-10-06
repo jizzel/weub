@@ -5,6 +5,7 @@ import { VideoUploadService } from './services/video-upload.service';
 import { PrismaModule } from '../../core/config/prisma/prisma.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { QueueModule } from '../../infrastructure/queue/queue.module';
+import { StorageModule } from '../../infrastructure/storage/storage.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { QueueModule } from '../../infrastructure/queue/queue.module';
         }
       },
     }),
+    StorageModule,
   ],
   controllers: [VideosController],
   providers: [VideosService, VideoUploadService],

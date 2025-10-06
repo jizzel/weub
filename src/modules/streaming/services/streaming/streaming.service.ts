@@ -1,9 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { promises as fs } from 'fs';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../../core/config/prisma/prisma/prisma.service';
-import { StorageService } from '../../../../infrastructure/storage/storage/storage.service';
 import { VideoNotFoundException } from '../../../../core/exceptions/custom-exceptions';
 import { VideoStatus } from '../../../../shared/enums/video-status.enum';
+import { IStorageService } from '../../../../infrastructure/storage/storage.interface';
 
 @Injectable()
 export class StreamingService {
@@ -11,20 +10,13 @@ export class StreamingService {
 
   constructor(
     private readonly prismaService: PrismaService,
-    private readonly storageService: StorageService,
+    @Inject('STORAGE_SERVICE') private readonly storageService: IStorageService,
   ) {}
 
   async getPlaylist(videoId: string, resolution: string): Promise<string> {
-    // Verify video exists and is ready
     await this.verifyVideoReady(videoId);
-
-    // Verify resolution exists for this video
     const videoOutput = await this.prismaService.videoOutput.findFirst({
-      where: {
-        videoId,
-        resolution,
-        status: 'READY',
-      },
+      where: { videoId, resolution, status: 'READY' },
     });
 
     if (!videoOutput) {
@@ -33,15 +25,14 @@ export class StreamingService {
       );
     }
 
-    // Get playlist content from storage
     const playlistPath = this.storageService.getPlaylistPath(
       videoId,
       resolution,
     );
 
     try {
-      const playlistContent = await fs.readFile(playlistPath, 'utf-8');
-      return playlistContent;
+      const playlistBuffer = await this.storageService.getFile(playlistPath);
+      return playlistBuffer.toString('utf-8');
     } catch (error) {
       this.logger.error(
         `Failed to read playlist file: ${playlistPath} - ${error.message}`,
@@ -55,16 +46,9 @@ export class StreamingService {
     resolution: string,
     segmentName: string,
   ): Promise<Buffer> {
-    // Verify video exists and is ready
     await this.verifyVideoReady(videoId);
-
-    // Verify resolution exists for this video
     const videoOutput = await this.prismaService.videoOutput.findFirst({
-      where: {
-        videoId,
-        resolution,
-        status: 'READY',
-      },
+      where: { videoId, resolution, status: 'READY' },
     });
 
     if (!videoOutput) {
@@ -73,7 +57,6 @@ export class StreamingService {
       );
     }
 
-    // Get segment from storage
     const segmentPath = this.storageService.getSegmentPath(
       videoId,
       resolution,
@@ -81,8 +64,7 @@ export class StreamingService {
     );
 
     try {
-      const segmentBuffer = await fs.readFile(segmentPath);
-      return segmentBuffer;
+      return await this.storageService.getFile(segmentPath);
     } catch (error) {
       this.logger.error(
         `Failed to read segment file: ${segmentPath} - ${error.message}`,
@@ -92,15 +74,11 @@ export class StreamingService {
   }
 
   async getThumbnail(videoId: string): Promise<Buffer> {
-    // Verify video exists and is ready
     await this.verifyVideoReady(videoId);
-
-    // Get thumbnail from storage
     const thumbnailPath = this.storageService.getThumbnailPath(videoId);
 
     try {
-      const thumbnailBuffer = await fs.readFile(thumbnailPath);
-      return thumbnailBuffer;
+      return await this.storageService.getFile(thumbnailPath);
     } catch (error) {
       this.logger.error(
         `Failed to read thumbnail file: ${thumbnailPath} - ${error.message}`,
@@ -110,18 +88,10 @@ export class StreamingService {
   }
 
   async getMasterPlaylist(videoId: string): Promise<string> {
-    // Verify video exists and is ready
-    const video = await this.verifyVideoReady(videoId);
-
-    // Get all available resolutions for this video
+    await this.verifyVideoReady(videoId);
     const videoOutputs = await this.prismaService.videoOutput.findMany({
-      where: {
-        videoId,
-        status: 'READY',
-      },
-      orderBy: {
-        bitrate: 'asc', // Order by bitrate ascending (lowest quality first)
-      },
+      where: { videoId, status: 'READY' },
+      orderBy: { bitrate: 'asc' },
     });
 
     if (videoOutputs.length === 0) {
@@ -130,13 +100,7 @@ export class StreamingService {
       );
     }
 
-    // Generate master playlist content
-    const masterPlaylistContent = this.generateMasterPlaylistContent(
-      videoId,
-      videoOutputs,
-    );
-
-    return masterPlaylistContent;
+    return this.generateMasterPlaylistContent(videoId, videoOutputs);
   }
 
   private generateMasterPlaylistContent(
@@ -144,23 +108,17 @@ export class StreamingService {
     videoOutputs: any[],
   ): string {
     let playlist = '#EXTM3U\n#EXT-X-VERSION:6\n\n';
-
     for (const output of videoOutputs) {
       playlist += `#EXT-X-STREAM-INF:BANDWIDTH=${output.bitrate * 1000},RESOLUTION=${output.width}x${output.height}\n`;
       playlist += `${output.resolution}/playlist.m3u8\n`;
     }
-
     return playlist;
   }
 
   private async verifyVideoReady(videoId: string) {
     const video = await this.prismaService.video.findUnique({
       where: { id: videoId },
-      select: {
-        id: true,
-        status: true,
-        title: true,
-      },
+      select: { id: true, status: true, title: true },
     });
 
     if (!video) {
@@ -177,19 +135,14 @@ export class StreamingService {
   }
 
   isValidSegmentName(segmentName: string): boolean {
-    // Validate segment name format: segment_0000.ts
     const segmentRegex = /^segment_\d{3}\.ts$/;
     return segmentRegex.test(segmentName);
   }
 
   async getVideoStreamingInfo(videoId: string) {
     const video = await this.verifyVideoReady(videoId);
-
     const videoOutputs = await this.prismaService.videoOutput.findMany({
-      where: {
-        videoId,
-        status: 'READY',
-      },
+      where: { videoId, status: 'READY' },
       select: {
         resolution: true,
         width: true,
